@@ -2,11 +2,6 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 
-const USERS: Record<string, string> = {
-  admin: 'hrga2024',
-  hr: 'hr1234',
-}
-
 export default function LoginPage() {
   const router = useRouter()
   const [username, setUsername] = useState('')
@@ -19,7 +14,7 @@ export default function LoginPage() {
     setLoading(true)
     setError('')
     setTimeout(() => {
-      if (USERS[username] === password) {
+      if (username === process.env.NEXT_PUBLIC_ADMIN_USERNAME && password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
         sessionStorage.setItem('hrga_logged_in', 'true')
         sessionStorage.setItem('hrga_user', username)
         router.push('/dashboard')
