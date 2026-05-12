@@ -3,6 +3,10 @@ import { useRouter, usePathname } from 'next/navigation'
 import { AppLogo } from '@/components/ui'
 import { LayoutDashboard, DollarSign, Target, CalendarDays, Star, Wrench, LogOut } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
+import { useEffect, useState } from 'react'
+import { canAccessRoute } from '@/app/auth/permissions'
+import type { UserRole } from '@/app/auth/auth.types'
 
 interface NavItem {
   href: string
@@ -22,9 +26,28 @@ const NAV: NavItem[] = [
 export default function Sidebar() {
   const router = useRouter()
   const pathname = usePathname()
+  const [role, setRole] = useState<UserRole>('viewer') // default safe role
 
-  function logout() {
+  useEffect(() => {
+    // If they used the legacy local fallback:
+    if (sessionStorage.getItem('hrga_logged_in') === 'true' && sessionStorage.getItem('hrga_user')) {
+      setRole('admin') // Admin override for legacy
+      return
+    }
+
+    const supabase = createClient()
+    supabase.auth.getUser().then((response) => {
+      const user = response.data.user;
+      if (user) {
+        setRole((user.user_metadata?.role as UserRole) || 'viewer')
+      }
+    })
+  }, [])
+
+  async function logout() {
     sessionStorage.clear()
+    const supabase = createClient()
+    await supabase.auth.signOut()
     router.push('/login')
   }
 
@@ -39,6 +62,8 @@ export default function Sidebar() {
       <nav className="flex-1 px-3 py-4 space-y-0.5">
         <p className="px-3 mb-2 text-[0.65rem] font-semibold text-gray-500 uppercase tracking-widest">Menu</p>
         {NAV.map(item => {
+          if (!canAccessRoute(role, item.href)) return null;
+
           const active = pathname === item.href || (item.href !== '/dashboard' && pathname.startsWith(item.href))
           const Icon = item.icon
           return (

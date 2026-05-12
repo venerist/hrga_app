@@ -2,7 +2,7 @@ import type { Metadata } from 'next'
 import './globals.css'
 
 export const metadata: Metadata = {
-  title: 'HRGA System — Enterprise HR & General Affairs',
+  title: 'Veneris HR — Enterprise HR & General Affairs',
   description: 'Modern enterprise Human Resource & General Affairs management platform',
 }
 

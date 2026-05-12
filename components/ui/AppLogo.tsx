@@ -25,7 +25,7 @@ export function AppLogo({ size = 'md', variant = 'dark', showText = true }: AppL
       {showText && (
         <div>
           <div className={`${textSizes[size]} font-bold tracking-tight ${textColor}`}>
-            HRGA System
+            Veneris HR
           </div>
           <div className="text-xs text-muted leading-tight">
             Human Resource & General Affairs

@@ -11,20 +11,42 @@ export default function LoginPage() {
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
 
-  function handleLogin(e: React.FormEvent) {
+  async function handleLogin(e: React.FormEvent) {
     e.preventDefault()
     setLoading(true)
     setError('')
-    setTimeout(() => {
-      if (username === process.env.NEXT_PUBLIC_ADMIN_USERNAME && password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD) {
+    try {
+      // Temporary check until user migrates their database to use Supabase Auth users.
+      // If the user uses the old NEXT_PUBLIC_ variables, we allow it temporarily but warn.
+      if (
+        process.env.NEXT_PUBLIC_ADMIN_USERNAME &&
+        username === process.env.NEXT_PUBLIC_ADMIN_USERNAME &&
+        password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD
+      ) {
+        console.warn('Using legacy local authentication. Please migrate to Supabase Auth.')
+        // In a real app we'd still want a token. For now, redirect.
+        // We will mock the auth state if they use legacy.
         sessionStorage.setItem('hrga_logged_in', 'true')
         sessionStorage.setItem('hrga_user', username)
         router.push('/dashboard')
-      } else {
-        setError('Username atau password salah.')
-        setLoading(false)
+        return
       }
-    }, 400)
+
+      // Secure Supabase Auth
+      const { createClient } = await import('@/lib/supabase/client')
+      const supabase = createClient()
+      const { error } = await supabase.auth.signInWithPassword({
+        email: username,
+        password: password,
+      })
+      
+      if (error) throw error
+      
+      router.push('/dashboard')
+    } catch (err: any) {
+      setError(err.message || 'Username atau password salah.')
+      setLoading(false)
+    }
   }
 
   return (
@@ -75,7 +97,7 @@ export default function LoginPage() {
           </button>
         </form>
 
-        <p className="text-center text-xs text-muted mt-6">© 2026 HRGA System. Enterprise Platform.</p>
+        <p className="text-center text-xs text-muted mt-6">© 2026 Veneris HR. Enterprise Platform.</p>
       </div>
     </div>
   )
