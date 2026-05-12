@@ -36,14 +36,16 @@ export async function updateSession(request: NextRequest) {
 
   // Protected route logic
   if (path.startsWith('/dashboard')) {
-    if (!user) {
+    const isLegacyAuth = request.cookies.get('hrga_legacy_auth')?.value === 'true'
+
+    if (!user && !isLegacyAuth) {
       const url = request.nextUrl.clone()
       url.pathname = '/login'
       return NextResponse.redirect(url)
     }
 
     // Role-based Access Control (RBAC)
-    const role = user.user_metadata?.role || 'viewer'
+    const role = isLegacyAuth ? 'admin' : (user?.user_metadata?.role || 'viewer')
     if (!canAccessRoute(role, path)) {
       const url = request.nextUrl.clone()
       url.pathname = '/dashboard' // Redirect unauthorized access to main dashboard
@@ -51,7 +53,9 @@ export async function updateSession(request: NextRequest) {
     }
   }
 
-  if (path === '/login' && user) {
+  const isLegacyAuth = request.cookies.get('hrga_legacy_auth')?.value === 'true'
+
+  if (path === '/login' && (user || isLegacyAuth)) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
     return NextResponse.redirect(url)

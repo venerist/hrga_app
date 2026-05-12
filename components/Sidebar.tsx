@@ -46,6 +46,7 @@ export default function Sidebar() {
 
   async function logout() {
     sessionStorage.clear()
+    document.cookie = "hrga_legacy_auth=; path=/; expires=Thu, 01 Jan 1970 00:00:00 UTC;"
     const supabase = createClient()
     await supabase.auth.signOut()
     router.push('/login')

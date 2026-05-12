@@ -3,6 +3,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { AppLogo } from '@/components/ui'
 import { Lock } from 'lucide-react'
+import { createClient } from '@/lib/supabase/client'
 
 export default function LoginPage() {
   const router = useRouter()
@@ -24,16 +25,15 @@ export default function LoginPage() {
         password === process.env.NEXT_PUBLIC_ADMIN_PASSWORD
       ) {
         console.warn('Using legacy local authentication. Please migrate to Supabase Auth.')
-        // In a real app we'd still want a token. For now, redirect.
-        // We will mock the auth state if they use legacy.
+        // Set both sessionStorage and a cookie so proxy.ts can read it on the server
         sessionStorage.setItem('hrga_logged_in', 'true')
         sessionStorage.setItem('hrga_user', username)
+        document.cookie = "hrga_legacy_auth=true; path=/; max-age=86400"
         router.push('/dashboard')
         return
       }
 
       // Secure Supabase Auth
-      const { createClient } = await import('@/lib/supabase/client')
       const supabase = createClient()
       const { error } = await supabase.auth.signInWithPassword({
         email: username,
