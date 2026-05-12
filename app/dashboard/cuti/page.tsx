@@ -1,11 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-
-const JENIS_OPTS = ['Cuti Tahunan','Cuti Sakit','Izin Pribadi','Cuti Melahirkan','Cuti Penting']
+import { leaveService } from '@/services/leave.service'
+import { MetricCard, PageHeader, StatusBadge, EmptyState, LoadingSpinner } from '@/components/ui'
+import type { Cuti, CutiStatus } from '@/types/leave.types'
+import { CUTI_JENIS_OPTIONS, CUTI_STATUS_OPTIONS, CUTI_JENIS_BADGE, CUTI_STATUS_BADGE } from '@/types/leave.types'
 
 export default function CutiPage() {
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<Cuti[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -15,60 +16,53 @@ export default function CutiPage() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('cuti').select('*').order('created_at', { ascending: false })
-    setRows(data || [])
-    setLoading(false)
+    try {
+      const data = await leaveService.getAll()
+      setRows(data)
+    } catch (e) {
+      console.error('Load error:', e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [])
 
   async function save() {
-    if (!form.nama) return alert('Nama wajib diisi.')
-    if (!form.tgl_mulai || !form.tgl_selesai) return alert('Tanggal wajib diisi.')
-    const durasi = Math.max(1, (new Date(form.tgl_selesai).getTime() - new Date(form.tgl_mulai).getTime()) / 86400000 + 1)
-    setSaving(true)
-    await supabase.from('cuti').insert({ ...form, durasi_hari: durasi, status: 'Pending' })
-    setSaving(false)
-    setShowForm(false)
-    setForm({ nama: '', jenis: 'Cuti Tahunan', tgl_mulai: '', tgl_selesai: '', alasan: '' })
-    load()
+    try {
+      setSaving(true)
+      await leaveService.create(form)
+      setShowForm(false)
+      setForm({ nama: '', jenis: 'Cuti Tahunan', tgl_mulai: '', tgl_selesai: '', alasan: '' })
+      load()
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function updateStatus(id: string, status: string) {
-    await supabase.from('cuti').update({ status }).eq('id', id)
+    await leaveService.updateStatus(id, status as CutiStatus)
     load()
   }
 
   async function hapus(id: string) {
     if (!confirm('Hapus data cuti ini?')) return
-    await supabase.from('cuti').delete().eq('id', id)
+    await leaveService.delete(id)
     load()
   }
 
-  const jenisBadge = (j: string) => {
-    const map: Record<string, string> = {
-      'Cuti Tahunan': 'badge-blue', 'Cuti Sakit': 'badge-red',
-      'Izin Pribadi': 'badge-yellow', 'Cuti Melahirkan': 'badge-orange', 'Cuti Penting': 'badge-gray'
-    }
-    return <span className={`badge ${map[j] || 'badge-gray'}`}>{j}</span>
-  }
-
-  const statusBadge = (s: string) => {
-    const map: Record<string, string> = { Pending: 'badge-yellow', Disetujui: 'badge-green', Ditolak: 'badge-red' }
-    return <span className={`badge ${map[s] || 'badge-gray'}`}>{s}</span>
-  }
+  const stats = leaveService.getStats(rows)
 
   return (
     <div>
-      <div className="page-header">
-        <h1>📅 Cuti & Izin</h1>
-        <p>Manajemen pengajuan cuti karyawan</p>
-      </div>
+      <PageHeader icon="📅" title="Cuti & Izin" subtitle="Manajemen pengajuan cuti karyawan" />
 
       <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 16 }}>
-        <div className="metric-card"><div className="metric-label">📋 Total Pengajuan</div><div className="metric-value">{rows.length}</div></div>
-        <div className="metric-card"><div className="metric-label">📆 Total Hari</div><div className="metric-value">{rows.reduce((s, r) => s + (r.durasi_hari || 0), 0)}</div></div>
-        <div className="metric-card"><div className="metric-label">⏳ Pending</div><div className="metric-value">{rows.filter(r => r.status === 'Pending').length}</div></div>
+        <MetricCard label="Total Pengajuan" value={stats.total} icon="📋" />
+        <MetricCard label="Total Hari" value={stats.totalHari} icon="📆" />
+        <MetricCard label="Pending" value={stats.pending} icon="⏳" />
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
@@ -88,7 +82,7 @@ export default function CutiPage() {
             <div className="form-group">
               <label className="form-label">Jenis</label>
               <select className="form-select" value={form.jenis} onChange={e => setForm({ ...form, jenis: e.target.value })}>
-                {JENIS_OPTS.map(j => <option key={j}>{j}</option>)}
+                {CUTI_JENIS_OPTIONS.map(j => <option key={j}>{j}</option>)}
               </select>
             </div>
             <div className="form-group">
@@ -111,9 +105,9 @@ export default function CutiPage() {
       )}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+        <LoadingSpinner />
       ) : rows.length === 0 ? (
-        <div className="empty-state"><div className="icon">📅</div><p>Belum ada pengajuan cuti.</p></div>
+        <EmptyState icon="📅" message="Belum ada pengajuan cuti." />
       ) : (
         <div className="table-wrap">
           <table>
@@ -124,11 +118,11 @@ export default function CutiPage() {
               {rows.map(r => (
                 <tr key={r.id}>
                   <td style={{ fontWeight: 700 }}>{r.nama}</td>
-                  <td>{jenisBadge(r.jenis)}</td>
+                  <td><StatusBadge label={r.jenis} config={CUTI_JENIS_BADGE[r.jenis]} /></td>
                   <td className="mono">{r.tgl_mulai}</td>
                   <td className="mono">{r.tgl_selesai}</td>
                   <td className="mono">{r.durasi_hari} hari</td>
-                  <td>{statusBadge(r.status)}</td>
+                  <td><StatusBadge label={r.status} config={CUTI_STATUS_BADGE[r.status]} /></td>
                   <td>
                     <div style={{ display: 'flex', gap: 6 }}>
                       <select
@@ -137,7 +131,7 @@ export default function CutiPage() {
                         value={r.status}
                         onChange={e => updateStatus(r.id, e.target.value)}
                       >
-                        {['Pending','Disetujui','Ditolak'].map(s => <option key={s}>{s}</option>)}
+                        {CUTI_STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
                       </select>
                       <button className="btn btn-sm" style={{ background: '#fee2e2', color: '#b91c1c', border: 'none' }} onClick={() => hapus(r.id)}>🗑️</button>
                     </div>

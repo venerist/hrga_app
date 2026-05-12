@@ -1,19 +1,12 @@
 'use client'
 import { useState, useEffect } from 'react'
-import { supabase } from '@/lib/supabase'
-
-const STATUS_OPTS = ['Screening','Interview','Tes Tertulis','Offering','Diterima','Ditolak']
-
-const statusBadge = (s: string) => {
-  const map: Record<string, string> = {
-    Screening: 'badge-gray', Interview: 'badge-blue', 'Tes Tertulis': 'badge-yellow',
-    Offering: 'badge-orange', Diterima: 'badge-green', Ditolak: 'badge-red'
-  }
-  return <span className={`badge ${map[s] || 'badge-gray'}`}>{s}</span>
-}
+import { recruitmentService } from '@/services/recruitment.service'
+import { MetricCard, PageHeader, StatusBadge, EmptyState, LoadingSpinner } from '@/components/ui'
+import type { Rekrutmen, RekrutmenStatus } from '@/types/recruitment.types'
+import { REKRUTMEN_STATUS_OPTIONS, REKRUTMEN_STATUS_BADGE } from '@/types/recruitment.types'
 
 export default function RekrutmenPage() {
-  const [rows, setRows] = useState<any[]>([])
+  const [rows, setRows] = useState<Rekrutmen[]>([])
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
@@ -21,47 +14,53 @@ export default function RekrutmenPage() {
 
   async function load() {
     setLoading(true)
-    const { data } = await supabase.from('rekrutmen').select('*').order('created_at', { ascending: false })
-    setRows(data || [])
-    setLoading(false)
+    try {
+      const data = await recruitmentService.getAll()
+      setRows(data)
+    } catch (e) {
+      console.error('Load error:', e)
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load() }, [])
 
   async function save() {
-    if (!form.nama || !form.posisi) return alert('Nama dan Posisi wajib diisi.')
-    setSaving(true)
-    await supabase.from('rekrutmen').insert({ ...form, tgl_melamar: form.tgl_melamar || null })
-    setSaving(false)
-    setShowForm(false)
-    setForm({ nama: '', posisi: '', tgl_melamar: '', status: 'Screening', catatan: '' })
-    load()
+    try {
+      setSaving(true)
+      await recruitmentService.create(form)
+      setShowForm(false)
+      setForm({ nama: '', posisi: '', tgl_melamar: '', status: 'Screening', catatan: '' })
+      load()
+    } catch (e: any) {
+      alert(e.message)
+    } finally {
+      setSaving(false)
+    }
   }
 
   async function updateStatus(id: string, status: string) {
-    await supabase.from('rekrutmen').update({ status }).eq('id', id)
+    await recruitmentService.updateStatus(id, status as RekrutmenStatus)
     load()
   }
 
   async function hapus(id: string) {
     if (!confirm('Hapus kandidat ini?')) return
-    await supabase.from('rekrutmen').delete().eq('id', id)
+    await recruitmentService.delete(id)
     load()
   }
 
-  const aktif = rows.filter(r => !['Diterima','Ditolak'].includes(r.status)).length
+  const stats = recruitmentService.getStats(rows)
 
   return (
     <div>
-      <div className="page-header">
-        <h1>🎯 Rekrutmen</h1>
-        <p>Pipeline kandidat & status seleksi</p>
-      </div>
+      <PageHeader icon="🎯" title="Rekrutmen" subtitle="Pipeline kandidat & status seleksi" />
 
       <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 16 }}>
-        <div className="metric-card"><div className="metric-label">👥 Total Kandidat</div><div className="metric-value">{rows.length}</div></div>
-        <div className="metric-card"><div className="metric-label">🔄 Proses Aktif</div><div className="metric-value">{aktif}</div></div>
-        <div className="metric-card"><div className="metric-label">✅ Diterima</div><div className="metric-value">{rows.filter(r => r.status === 'Diterima').length}</div></div>
+        <MetricCard label="Total Kandidat" value={stats.total} icon="👥" />
+        <MetricCard label="Proses Aktif" value={stats.aktif} icon="🔄" />
+        <MetricCard label="Diterima" value={stats.diterima} icon="✅" />
       </div>
 
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
@@ -89,7 +88,7 @@ export default function RekrutmenPage() {
             <div className="form-group">
               <label className="form-label">Status</label>
               <select className="form-select" value={form.status} onChange={e => setForm({ ...form, status: e.target.value })}>
-                {STATUS_OPTS.map(s => <option key={s}>{s}</option>)}
+                {REKRUTMEN_STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
               </select>
             </div>
           </div>
@@ -104,9 +103,9 @@ export default function RekrutmenPage() {
       )}
 
       {loading ? (
-        <div style={{ textAlign: 'center', padding: 40 }}><span className="spinner" /></div>
+        <LoadingSpinner />
       ) : rows.length === 0 ? (
-        <div className="empty-state"><div className="icon">🎯</div><p>Belum ada kandidat.</p></div>
+        <EmptyState icon="🎯" message="Belum ada kandidat." />
       ) : (
         <div className="table-wrap">
           <table>
@@ -119,7 +118,7 @@ export default function RekrutmenPage() {
                   <td style={{ fontWeight: 700 }}>{r.nama}</td>
                   <td>{r.posisi}</td>
                   <td className="mono">{r.tgl_melamar || '-'}</td>
-                  <td>{statusBadge(r.status)}</td>
+                  <td><StatusBadge label={r.status} config={REKRUTMEN_STATUS_BADGE[r.status]} /></td>
                   <td style={{ color: 'var(--muted)', maxWidth: 200 }}>{r.catatan || '-'}</td>
                   <td>
                     <div style={{ display: 'flex', gap: 6 }}>
@@ -129,7 +128,7 @@ export default function RekrutmenPage() {
                         value={r.status}
                         onChange={e => updateStatus(r.id, e.target.value)}
                       >
-                        {STATUS_OPTS.map(s => <option key={s}>{s}</option>)}
+                        {REKRUTMEN_STATUS_OPTIONS.map(s => <option key={s}>{s}</option>)}
                       </select>
                       <button className="btn btn-sm" style={{ background: '#fee2e2', color: '#b91c1c', border: 'none' }} onClick={() => hapus(r.id)}>🗑️</button>
                     </div>

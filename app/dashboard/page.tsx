@@ -1,125 +1,42 @@
 'use client'
 import { useEffect, useState } from 'react'
-import { supabase } from '@/lib/supabase'
-
-interface Stats {
-  rekrutmen: number
-  cuti: number
-  kpi: number
-  ga: number
-  totalKaryawan: number
-  hariKerja: number
-  terlambat: number
-  tap1x: number
-  totalMntTelat: number
-  periodeLabel: string
-}
+import { dashboardService, type DashboardStats, type TopTerlambat, type TopAbsen } from '@/services/dashboard.service'
+import { MetricCard, PageHeader, LoadingSpinner } from '@/components/ui'
 
 export default function DashboardPage() {
-  const [stats, setStats] = useState<Stats | null>(null)
-  const [topTelat, setTopTelat] = useState<any[]>([])
-  const [topAbsen, setTopAbsen] = useState<any[]>([])
+  const [stats, setStats] = useState<DashboardStats | null>(null)
+  const [topTelat, setTopTelat] = useState<TopTerlambat[]>([])
+  const [topAbsen, setTopAbsen] = useState<TopAbsen[]>([])
   const [loading, setLoading] = useState(true)
 
   useEffect(() => {
     async function load() {
-      const [
-        { count: rekrutmen },
-        { count: cuti },
-        { count: kpi },
-        { count: ga },
-        { data: absensi },
-      ] = await Promise.all([
-        supabase.from('rekrutmen').select('*', { count: 'exact', head: true }),
-        supabase.from('cuti').select('*', { count: 'exact', head: true }),
-        supabase.from('kpi').select('*', { count: 'exact', head: true }),
-        supabase.from('ga').select('*', { count: 'exact', head: true }),
-        supabase.from('absensi').select('nama,tanggal,status,menit_terlambat,departemen').order('tanggal', { ascending: false }),
-      ])
-
-      if (absensi && absensi.length > 0) {
-        const namas = new Set(absensi.map((r: any) => r.nama))
-        const tanggals = new Set(absensi.map((r: any) => r.tanggal))
-        const terlambat = absensi.filter((r: any) => r.status === 'Terlambat')
-        const tap1xArr = absensi.filter((r: any) => r.status === 'Tap Masuk' || r.status === 'Tap Keluar')
-        const totalMntTelat = absensi.reduce((s: number, r: any) => s + (r.menit_terlambat || 0), 0)
-
-        // top terlambat
-        const telatMap: Record<string, { frekuensi: number; total: number }> = {}
-        for (const r of terlambat) {
-          if (!telatMap[r.nama]) telatMap[r.nama] = { frekuensi: 0, total: 0 }
-          telatMap[r.nama].frekuensi++
-          telatMap[r.nama].total += r.menit_terlambat || 0
-        }
-        const topT = Object.entries(telatMap)
-          .map(([nama, v]) => ({ nama, ...v }))
-          .sort((a, b) => b.total - a.total).slice(0, 7)
-        setTopTelat(topT)
-
-        // top absen
-        const hadirMap: Record<string, number> = {}
-        for (const r of absensi) { hadirMap[r.nama] = (hadirMap[r.nama] || 0) + 1 }
-        const totalHari = tanggals.size
-        const topA = Object.entries(hadirMap)
-          .map(([nama, hadir]) => ({ nama, hadir, absen: totalHari - hadir, pct: Math.round(hadir / totalHari * 100) }))
-          .sort((a, b) => b.absen - a.absen).slice(0, 7)
-        setTopAbsen(topA)
-
-        // periode label
-        const latestTgl = Array.from(tanggals).sort().reverse()[0] as string
-        const d = new Date(latestTgl)
-        const periodeLabel = d.toLocaleDateString('id-ID', { month: 'long', year: 'numeric' })
-
-        setStats({
-          rekrutmen: rekrutmen || 0,
-          cuti: cuti || 0,
-          kpi: kpi || 0,
-          ga: ga || 0,
-          totalKaryawan: namas.size,
-          hariKerja: tanggals.size,
-          terlambat: terlambat.length,
-          tap1x: tap1xArr.length,
-          totalMntTelat,
-          periodeLabel,
-        })
-      } else {
-        setStats({
-          rekrutmen: rekrutmen || 0, cuti: cuti || 0, kpi: kpi || 0, ga: ga || 0,
-          totalKaryawan: 0, hariKerja: 0, terlambat: 0, tap1x: 0, totalMntTelat: 0,
-          periodeLabel: '-',
-        })
+      try {
+        const result = await dashboardService.loadDashboard()
+        setStats(result.stats)
+        setTopTelat(result.topTelat)
+        setTopAbsen(result.topAbsen)
+      } catch (e) {
+        console.error('Dashboard load error:', e)
+      } finally {
+        setLoading(false)
       }
-      setLoading(false)
     }
     load()
   }, [])
 
-  if (loading) return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', height: '60vh', gap: 12 }}>
-      <span className="spinner" /> <span style={{ color: 'var(--muted)', fontSize: '0.85rem' }}>Memuat data...</span>
-    </div>
-  )
+  if (loading) return <LoadingSpinner fullPage text="Memuat data..." />
 
   return (
     <div>
-      <div className="page-header">
-        <h1>🏠 Dashboard</h1>
-        <p>Ringkasan HRGA — {stats?.periodeLabel}</p>
-      </div>
+      <PageHeader icon="🏠" title="Dashboard" subtitle={`Ringkasan HRGA — ${stats?.periodeLabel}`} />
 
-      {/* Modul counts */}
+      {/* Module counts */}
       <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)' }}>
-        {[
-          { label: 'Rekrutmen', value: stats?.rekrutmen, icon: '🎯' },
-          { label: 'Pengajuan Cuti', value: stats?.cuti, icon: '📅' },
-          { label: 'Data KPI', value: stats?.kpi, icon: '⭐' },
-          { label: 'Tiket GA', value: stats?.ga, icon: '🔧' },
-        ].map(m => (
-          <div key={m.label} className="metric-card">
-            <div className="metric-label">{m.icon} {m.label}</div>
-            <div className="metric-value">{m.value}</div>
-          </div>
-        ))}
+        <MetricCard label="Rekrutmen" value={stats?.rekrutmen ?? 0} icon="🎯" />
+        <MetricCard label="Pengajuan Cuti" value={stats?.cuti ?? 0} icon="📅" />
+        <MetricCard label="Data KPI" value={stats?.kpi ?? 0} icon="⭐" />
+        <MetricCard label="Tiket GA" value={stats?.ga ?? 0} icon="🔧" />
       </div>
 
       {stats?.totalKaryawan ? (
@@ -128,18 +45,11 @@ export default function DashboardPage() {
           <div className="section-title">📊 Ringkasan Absensi {stats.periodeLabel}</div>
 
           <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(5, 1fr)' }}>
-            {[
-              { label: 'Total Karyawan', value: stats.totalKaryawan, icon: '👥' },
-              { label: 'Hari Kerja', value: stats.hariKerja, icon: '📆' },
-              { label: 'Total Terlambat', value: stats.terlambat, icon: '⚠️' },
-              { label: 'Total Mnt Telat', value: stats.totalMntTelat, icon: '⏱️' },
-              { label: 'Data Tap 1x', value: stats.tap1x, icon: '🟡' },
-            ].map(m => (
-              <div key={m.label} className="metric-card">
-                <div className="metric-label">{m.icon} {m.label}</div>
-                <div className="metric-value">{m.value}</div>
-              </div>
-            ))}
+            <MetricCard label="Total Karyawan" value={stats.totalKaryawan} icon="👥" />
+            <MetricCard label="Hari Kerja" value={stats.hariKerja} icon="📆" />
+            <MetricCard label="Total Terlambat" value={stats.terlambat} icon="⚠️" />
+            <MetricCard label="Total Mnt Telat" value={stats.totalMntTelat} icon="⏱️" />
+            <MetricCard label="Data Tap 1x" value={stats.tap1x} icon="🟡" />
           </div>
 
           <div className="grid-2" style={{ marginTop: 20 }}>
