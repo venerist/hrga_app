@@ -1,6 +1,5 @@
 // Barrel export for all UI components
-// Import from '@/components/ui' instead of individual files
-
+export { AppLogo } from './AppLogo'
 export { MetricCard } from './MetricCard'
 export { PageHeader } from './PageHeader'
 export { StatusBadge, SimpleBadge } from './StatusBadge'

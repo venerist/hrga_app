@@ -1,60 +1,46 @@
-// Reusable DataTable component
-// Replaces the repeated table-wrap + table pattern in all pages
-
 import type { ReactNode } from 'react'
 
 export interface Column<T> {
-  /** Column header label */
   header: string
-  /** Key accessor or render function */
   accessor?: keyof T
-  /** Custom cell renderer */
   render?: (row: T, index: number) => ReactNode
-  /** Custom cell style */
-  style?: React.CSSProperties
-  /** Add mono class to cell */
   mono?: boolean
+  className?: string
 }
 
 interface DataTableProps<T> {
   columns: Column<T>[]
   data: T[]
-  /** Unique key extractor */
   rowKey?: (row: T, index: number) => string
 }
 
 export function DataTable<T>({ columns, data, rowKey }: DataTableProps<T>) {
   return (
-    <div className="table-wrap">
-      <table>
-        <thead>
-          <tr>
-            {columns.map((col, i) => (
-              <th key={i}>{col.header}</th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {data.map((row, rowIndex) => (
-            <tr key={rowKey ? rowKey(row, rowIndex) : rowIndex}>
-              {columns.map((col, colIndex) => (
-                <td
-                  key={colIndex}
-                  className={col.mono ? 'mono' : undefined}
-                  style={col.style}
-                >
-                  {col.render
-                    ? col.render(row, rowIndex)
-                    : col.accessor
-                      ? String((row as any)[col.accessor] ?? '-')
-                      : '-'
-                  }
-                </td>
+    <div className="bg-card border border-border rounded-2xl overflow-hidden">
+      <div className="overflow-x-auto">
+        <table className="w-full text-sm">
+          <thead>
+            <tr className="border-b border-border bg-surface">
+              {columns.map((col, i) => (
+                <th key={i} className="px-4 py-3 text-left text-[0.7rem] font-semibold text-muted uppercase tracking-wider whitespace-nowrap">
+                  {col.header}
+                </th>
               ))}
             </tr>
-          ))}
-        </tbody>
-      </table>
+          </thead>
+          <tbody className="divide-y divide-border/60">
+            {data.map((row, ri) => (
+              <tr key={rowKey ? rowKey(row, ri) : ri} className="hover:bg-surface/60 transition-colors">
+                {columns.map((col, ci) => (
+                  <td key={ci} className={`px-4 py-3 text-dark ${col.mono ? 'font-mono text-xs' : ''} ${col.className || ''}`}>
+                    {col.render ? col.render(row, ri) : col.accessor ? String((row as Record<string, unknown>)[col.accessor as string] ?? '-') : '-'}
+                  </td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
     </div>
   )
 }

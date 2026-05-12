@@ -5,6 +5,7 @@ import { attendanceService } from '@/services/attendance.service'
 import { MetricCard, PageHeader, StatusBadge, EmptyState } from '@/components/ui'
 import type { Absensi, AbsensiStatus, RawFingerprintRecord } from '@/types/attendance.types'
 import { ABSENSI_STATUS_BADGE } from '@/types/attendance.types'
+import { Upload, Download, Save, CheckCircle } from 'lucide-react'
 
 type Tab = 'ringkasan' | 'terlambat' | 'tap1x' | 'absensi'
 
@@ -22,33 +23,23 @@ export default function PayrollPage() {
   const fileRef = useRef<HTMLInputElement>(null)
 
   const processFile = useCallback(async (file: File) => {
-    setUploading(true)
-    setSaved(false)
+    setUploading(true); setSaved(false)
     try {
       const buf = await file.arrayBuffer()
       const wb = XLSX.read(buf, { type: 'array', cellDates: true })
-      const ws = wb.Sheets[wb.SheetNames[0]]
-      const raw = XLSX.utils.sheet_to_json(ws, { raw: false }) as RawFingerprintRecord[]
-
+      const raw = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { raw: false }) as RawFingerprintRecord[]
       const processed = attendanceService.processFingerprint(raw)
       setData(processed)
       setTap1Info(attendanceService.calculateTap1xStats(processed))
       if (processed.length > 0) setPeriode(processed[0].periode)
-    } finally {
-      setUploading(false)
-    }
+    } finally { setUploading(false) }
   }, [])
 
   async function saveToSupabase() {
     setSaving(true)
-    try {
-      await attendanceService.saveToDatabase(data, periode)
-      setSaved(true)
-    } catch (e: any) {
-      alert('Gagal simpan: ' + e.message)
-    } finally {
-      setSaving(false)
-    }
+    try { await attendanceService.saveToDatabase(data, periode); setSaved(true) }
+    catch (e: any) { alert('Gagal simpan: ' + e.message) }
+    finally { setSaving(false) }
   }
 
   function downloadExcel() {
@@ -59,50 +50,56 @@ export default function PayrollPage() {
     XLSX.writeFile(wb, `rekap_absensi_${periode}.xlsx`)
   }
 
-  // Filters
   const namaList = ['Semua', ...Array.from(new Set(data.map(d => d.nama))).sort()]
   const tglList = ['Semua', ...Array.from(new Set(data.map(d => d.tanggal))).sort()]
-  const df = data
-    .filter(r => filterNama === 'Semua' || r.nama === filterNama)
-    .filter(r => filterTgl === 'Semua' || r.tanggal === filterTgl)
-
+  const df = data.filter(r => filterNama === 'Semua' || r.nama === filterNama).filter(r => filterTgl === 'Semua' || r.tanggal === filterTgl)
   const rekap = attendanceService.calculateRekap(df)
   const terlambatData = df.filter(r => r.status === 'Terlambat').sort((a, b) => b.menit_terlambat - a.menit_terlambat)
   const tap1Data = df.filter(r => r.status === 'Tap Masuk' || r.status === 'Tap Keluar')
 
+  const TABS: { key: Tab; label: string }[] = [
+    { key: 'ringkasan', label: '📊 Ringkasan' },
+    { key: 'terlambat', label: `⚠️ Terlambat (${terlambatData.length})` },
+    { key: 'tap1x', label: `🟡 Tap 1x (${tap1Data.length})` },
+    { key: 'absensi', label: '🚫 Ketidakhadiran' },
+  ]
+
   return (
-    <div>
+    <div className="space-y-6">
       <PageHeader icon="💰" title="Payroll & Absensi" subtitle="Proses data fingerprint — terlambat, tap 1x, ketidakhadiran" />
 
-      {/* Upload Zone */}
-      <div className="card" style={{ marginBottom: 20 }}>
-        <div className="section-title">📤 Upload File Fingerprint (.xls / .xlsx)</div>
+      {/* Upload Card */}
+      <div className="bg-card border border-border rounded-2xl p-6">
+        <h3 className="text-sm font-bold text-dark mb-4 flex items-center gap-2"><Upload size={16} /> Upload File Fingerprint</h3>
         <div
-          className={`upload-zone ${dragover ? 'dragover' : ''}`}
+          className={`border-2 border-dashed rounded-2xl p-10 text-center cursor-pointer transition-all duration-200 ${dragover ? 'border-brand bg-brand-light scale-[1.01]' : 'border-border bg-surface hover:border-brand/50 hover:bg-brand-light/50'}`}
           onClick={() => fileRef.current?.click()}
           onDragOver={e => { e.preventDefault(); setDragover(true) }}
           onDragLeave={() => setDragover(false)}
           onDrop={e => { e.preventDefault(); setDragover(false); const f = e.dataTransfer.files[0]; if (f) processFile(f) }}
         >
           {uploading
-            ? <><span className="spinner" /><p style={{ marginTop: 12, color: 'var(--muted)' }}>Memproses file...</p></>
+            ? <><span className="spinner" /><p className="mt-3 text-sm text-muted">Memproses file...</p></>
             : <>
-              <div style={{ fontSize: '2rem', marginBottom: 8 }}>📂</div>
-              <div style={{ fontWeight: 700, marginBottom: 4 }}>Drag & drop atau klik untuk pilih file</div>
-              <div style={{ fontSize: '0.8rem', color: 'var(--muted)' }}>Format: .xls atau .xlsx dari mesin fingerprint</div>
+              <div className="w-14 h-14 bg-brand/10 rounded-2xl flex items-center justify-center mx-auto mb-3"><Upload size={24} className="text-brand" /></div>
+              <p className="font-semibold text-dark text-sm">Drag & drop atau klik untuk pilih file</p>
+              <p className="text-xs text-muted mt-1">Format: .xls atau .xlsx dari mesin fingerprint</p>
             </>
           }
-          <input ref={fileRef} type="file" accept=".xls,.xlsx" style={{ display: 'none' }} onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }} />
+          <input ref={fileRef} type="file" accept=".xls,.xlsx" className="hidden" onChange={e => { const f = e.target.files?.[0]; if (f) processFile(f) }} />
         </div>
+
         {data.length > 0 && (
-          <div style={{ marginTop: 12, display: 'flex', gap: 10, flexWrap: 'wrap', alignItems: 'center' }}>
-            <div className="alert alert-success" style={{ margin: 0, flex: 1 }}>
-              ✅ <strong>{data.length} record</strong> dari <strong>{new Set(data.map(d => d.nama)).size} karyawan</strong> berhasil diproses.
-              {tap1Info.count > 0 && <span style={{ marginLeft: 8 }}>⚠️ {tap1Info.count} data tap 1x ({tap1Info.pct}%)</span>}
+          <div className="mt-4 flex flex-wrap items-center gap-3">
+            <div className="flex-1 flex items-center gap-2 p-3 rounded-xl bg-emerald-50 text-emerald-800 text-sm border border-emerald-100">
+              <CheckCircle size={16} /> <strong>{data.length} record</strong> dari <strong>{new Set(data.map(d => d.nama)).size} karyawan</strong> diproses.
+              {tap1Info.count > 0 && <span className="ml-2 text-amber-700">⚠️ {tap1Info.count} tap 1x ({tap1Info.pct}%)</span>}
             </div>
-            <button className="btn btn-outline btn-sm" onClick={downloadExcel}>⬇️ Download Excel</button>
-            <button className="btn btn-primary btn-sm" onClick={saveToSupabase} disabled={saving}>
-              {saving ? <span className="spinner" /> : saved ? '✅ Tersimpan' : '💾 Simpan ke Database'}
+            <button onClick={downloadExcel} className="flex items-center gap-1.5 px-4 py-2 rounded-xl border border-border bg-card text-sm font-semibold text-dark hover:border-brand hover:text-brand transition-all cursor-pointer">
+              <Download size={15} /> Excel
+            </button>
+            <button onClick={saveToSupabase} disabled={saving} className="flex items-center gap-1.5 px-4 py-2 rounded-xl bg-brand text-white text-sm font-semibold hover:bg-brand-dark transition-all disabled:opacity-60 cursor-pointer shadow-md shadow-brand/15">
+              {saving ? <span className="spinner" /> : saved ? <><CheckCircle size={15} /> Tersimpan</> : <><Save size={15} /> Simpan</>}
             </button>
           </div>
         )}
@@ -113,30 +110,28 @@ export default function PayrollPage() {
       ) : (
         <>
           {/* Filters */}
-          <div className="grid-2" style={{ marginBottom: 16 }}>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">👤 Filter Karyawan</label>
-              <select className="form-select" value={filterNama} onChange={e => setFilterNama(e.target.value)}>
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div>
+              <label className="block text-xs font-semibold text-dark mb-1.5">👤 Filter Karyawan</label>
+              <select className="w-full px-3.5 py-2.5 rounded-xl border-[1.5px] border-border bg-card text-sm font-medium outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 transition-all" value={filterNama} onChange={e => setFilterNama(e.target.value)}>
                 {namaList.map(n => <option key={n}>{n}</option>)}
               </select>
             </div>
-            <div className="form-group" style={{ marginBottom: 0 }}>
-              <label className="form-label">📅 Filter Tanggal</label>
-              <select className="form-select" value={filterTgl} onChange={e => setFilterTgl(e.target.value)}>
+            <div>
+              <label className="block text-xs font-semibold text-dark mb-1.5">📅 Filter Tanggal</label>
+              <select className="w-full px-3.5 py-2.5 rounded-xl border-[1.5px] border-border bg-card text-sm font-medium outline-none focus:border-brand focus:ring-2 focus:ring-brand/10 transition-all" value={filterTgl} onChange={e => setFilterTgl(e.target.value)}>
                 {tglList.map(t => <option key={t}>{t}</option>)}
               </select>
             </div>
           </div>
 
           {/* Tabs */}
-          <div className="tabs">
-            {([
-              ['ringkasan', '📊 Ringkasan'],
-              ['terlambat', `⚠️ Terlambat (${terlambatData.length})`],
-              ['tap1x', `🟡 Tap 1x (${tap1Data.length})`],
-              ['absensi', '🚫 Ketidakhadiran'],
-            ] as [Tab, string][]).map(([key, label]) => (
-              <button key={key} className={`tab ${tab === key ? 'active' : ''}`} onClick={() => setTab(key)}>{label}</button>
+          <div className="flex gap-1 p-1 bg-gray-100 rounded-xl w-fit flex-wrap">
+            {TABS.map(t => (
+              <button key={t.key} onClick={() => setTab(t.key)}
+                className={`px-4 py-2 rounded-lg text-[0.8rem] font-semibold transition-all cursor-pointer ${tab === t.key ? 'bg-card text-brand shadow-sm' : 'text-muted hover:text-dark'}`}>
+                {t.label}
+              </button>
             ))}
           </div>
 
@@ -150,100 +145,122 @@ export default function PayrollPage() {
   )
 }
 
-/* ── Sub-components (tabs) ── */
-
 function RingkasanTab({ rekap }: { rekap: ReturnType<typeof attendanceService.calculateRekap> }) {
   return (
-    <>
-      <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(4, 1fr)', marginBottom: 16 }}>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
         <MetricCard label="Karyawan" value={rekap.length} icon="👥" />
         <MetricCard label="Avg Hadir" value={`${rekap.length ? Math.round(rekap.reduce((s, r) => s + r.pct_kehadiran, 0) / rekap.length) : 0}%`} icon="📈" />
         <MetricCard label="Terlambat" value={rekap.reduce((s, r) => s + r.terlambat, 0)} icon="⚠️" />
         <MetricCard label="Total Mnt" value={rekap.reduce((s, r) => s + r.total_mnt_telat, 0)} icon="⏱️" />
       </div>
-      <div className="table-wrap">
-        <table>
-          <thead><tr><th>Nama</th><th>Dept</th><th>Hadir</th><th>Absen</th><th>% Hadir</th><th>Terlambat</th><th>Total Mnt Telat</th><th>Tap 1x</th><th>Avg Jam</th></tr></thead>
-          <tbody>
-            {rekap.map((r, i) => (
-              <tr key={i}>
-                <td style={{ fontWeight: 700 }}>{r.nama}</td>
-                <td style={{ color: 'var(--muted)' }}>{r.departemen}</td>
-                <td className="mono">{r.hari_hadir}</td>
-                <td><span className={`badge ${r.tidak_hadir > 0 ? 'badge-red' : 'badge-green'}`}>{r.tidak_hadir}</span></td>
-                <td className="mono">{r.pct_kehadiran}%</td>
-                <td><span className={`badge ${r.terlambat > 0 ? 'badge-orange' : 'badge-green'}`}>{r.terlambat}</span></td>
-                <td className="mono" style={{ color: r.total_mnt_telat > 0 ? 'var(--err)' : 'inherit', fontWeight: r.total_mnt_telat > 30 ? 700 : 400 }}>{r.total_mnt_telat} mnt</td>
-                <td><span className={`badge ${r.tap_1x > 0 ? 'badge-yellow' : 'badge-gray'}`}>{r.tap_1x}</span></td>
-                <td className="mono">{r.avg_jam || '-'}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div className="bg-card border border-border rounded-2xl overflow-hidden">
+        <div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border bg-surface">
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Nama</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Dept</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Hadir</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Absen</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">%</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Telat</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Mnt</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Tap1x</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Avg</th>
+            </tr></thead>
+            <tbody className="divide-y divide-border/50">
+              {rekap.map((r, i) => (
+                <tr key={i} className="hover:bg-surface/60 transition-colors">
+                  <td className="px-4 py-3 font-semibold text-dark">{r.nama}</td>
+                  <td className="px-4 py-3 text-muted text-xs">{r.departemen}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.hari_hadir}</td>
+                  <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 rounded-full text-[0.68rem] font-semibold ring-1 ring-inset ${r.tidak_hadir > 0 ? 'bg-red-50 text-red-700 ring-red-600/10' : 'bg-emerald-50 text-emerald-700 ring-emerald-600/10'}`}>{r.tidak_hadir}</span></td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.pct_kehadiran}%</td>
+                  <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 rounded-full text-[0.68rem] font-semibold ring-1 ring-inset ${r.terlambat > 0 ? 'bg-orange-50 text-orange-700 ring-orange-600/10' : 'bg-emerald-50 text-emerald-700 ring-emerald-600/10'}`}>{r.terlambat}</span></td>
+                  <td className={`px-4 py-3 font-mono text-xs ${r.total_mnt_telat > 0 ? 'text-err font-bold' : ''}`}>{r.total_mnt_telat}</td>
+                  <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 rounded-full text-[0.68rem] font-semibold ring-1 ring-inset ${r.tap_1x > 0 ? 'bg-amber-50 text-amber-700 ring-amber-600/10' : 'bg-gray-50 text-gray-500 ring-gray-400/10'}`}>{r.tap_1x}</span></td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.avg_jam || '-'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       </div>
-    </>
+    </div>
   )
 }
 
 function TerlambatTab({ data }: { data: Omit<Absensi, 'id' | 'created_at'>[] }) {
   return (
-    <>
-      <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 16 }}>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard label="Kejadian" value={data.length} icon="⚠️" />
         <MetricCard label="Total Menit" value={data.reduce((s, r) => s + r.menit_terlambat, 0)} icon="⏱️" />
         <MetricCard label="Karyawan" value={new Set(data.map(r => r.nama)).size} icon="👥" />
       </div>
-      <div className="alert alert-warning">⏰ Toleransi keterlambatan: <strong>5 menit</strong> dari jam 08:00. Merah = &gt;30 menit.</div>
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 text-amber-800 text-sm border border-amber-100">⏰ Toleransi: <strong>5 menit</strong> dari 08:00. Merah = &gt;30 mnt.</div>
       {data.length === 0 ? <EmptyState icon="🎉" message="Tidak ada keterlambatan!" /> : (
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>Nama</th><th>Tanggal</th><th>Jam Masuk</th><th>Menit Terlambat</th><th>Durasi Kerja</th></tr></thead>
-            <tbody>
+        <div className="bg-card border border-border rounded-2xl overflow-hidden"><div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border bg-surface">
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Nama</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Tanggal</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Masuk</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Mnt Telat</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Durasi</th>
+            </tr></thead>
+            <tbody className="divide-y divide-border/50">
               {data.map((r, i) => (
-                <tr key={i}>
-                  <td style={{ fontWeight: 700 }}>{r.nama}</td>
-                  <td className="mono">{r.tanggal}</td>
-                  <td className="mono">{r.jam_masuk_str}</td>
-                  <td><span className={`badge ${r.menit_terlambat > 30 ? 'badge-red' : 'badge-orange'}`} style={{ fontWeight: 800 }}>{r.menit_terlambat} mnt</span></td>
-                  <td className="mono">{r.durasi_jam !== null ? `${r.durasi_jam} jam` : '-'}</td>
+                <tr key={i} className="hover:bg-surface/60 transition-colors">
+                  <td className="px-4 py-3 font-semibold text-dark">{r.nama}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.tanggal}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.jam_masuk_str}</td>
+                  <td className="px-4 py-3"><span className={`inline-flex px-2 py-0.5 rounded-full text-[0.68rem] font-bold ring-1 ring-inset ${r.menit_terlambat > 30 ? 'bg-red-50 text-red-700 ring-red-600/10' : 'bg-orange-50 text-orange-700 ring-orange-600/10'}`}>{r.menit_terlambat} mnt</span></td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.durasi_jam !== null ? `${r.durasi_jam} jam` : '-'}</td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </div></div>
       )}
-    </>
+    </div>
   )
 }
 
 function Tap1xTab({ data, tap1Data }: { data: Omit<Absensi, 'id' | 'created_at'>[]; tap1Data: Omit<Absensi, 'id' | 'created_at'>[] }) {
   return (
-    <>
-      <div className="alert alert-warning">🟡 <strong>Tap 1x</strong> = karyawan hanya tap sekali. Tetap dihitung <strong>hadir</strong>, namun perlu tindak lanjut.</div>
-      <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 16 }}>
+    <div className="space-y-4">
+      <div className="flex items-center gap-2 p-3 rounded-xl bg-amber-50 text-amber-800 text-sm border border-amber-100">🟡 <strong>Tap 1x</strong> = hanya tap sekali. Tetap <strong>hadir</strong>, perlu tindak lanjut.</div>
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard label="Total Kejadian" value={tap1Data.length} icon="🟡" />
         <MetricCard label="Karyawan" value={new Set(tap1Data.map(r => r.nama)).size} icon="👥" />
         <MetricCard label="% dari Total" value={`${data.length ? Math.round(tap1Data.length / data.length * 100) : 0}%`} icon="📊" />
       </div>
       {tap1Data.length === 0 ? <EmptyState icon="🎉" message="Tidak ada data tap 1x!" /> : (
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>Nama</th><th>Departemen</th><th>Tanggal</th><th>Waktu Tap</th><th>Keterangan</th></tr></thead>
-            <tbody>
-              {tap1Data.sort((a, b) => a.nama.localeCompare(b.nama)).map((r, i) => (
-                <tr key={i}>
-                  <td style={{ fontWeight: 700 }}>{r.nama}</td>
-                  <td style={{ color: 'var(--muted)' }}>{r.departemen}</td>
-                  <td className="mono">{r.tanggal}</td>
-                  <td className="mono">{r.jam_masuk_str}</td>
-                  <td><StatusBadge label={r.status} config={ABSENSI_STATUS_BADGE[r.status as AbsensiStatus]} /></td>
+        <div className="bg-card border border-border rounded-2xl overflow-hidden"><div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border bg-surface">
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Nama</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Dept</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Tanggal</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Waktu</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Status</th>
+            </tr></thead>
+            <tbody className="divide-y divide-border/50">
+              {[...tap1Data].sort((a, b) => a.nama.localeCompare(b.nama)).map((r, i) => (
+                <tr key={i} className="hover:bg-surface/60 transition-colors">
+                  <td className="px-4 py-3 font-semibold text-dark">{r.nama}</td>
+                  <td className="px-4 py-3 text-muted text-xs">{r.departemen}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.tanggal}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.jam_masuk_str}</td>
+                  <td className="px-4 py-3"><StatusBadge label={r.status} config={ABSENSI_STATUS_BADGE[r.status as AbsensiStatus]} /></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </div></div>
       )}
-    </>
+    </div>
   )
 }
 
@@ -252,31 +269,35 @@ function AbsensiTab({ data, df }: { data: Omit<Absensi, 'id' | 'created_at'>[]; 
   const allNama = Array.from(new Set(data.map(d => d.nama))).sort()
   const hadirSet = new Set(df.map(r => `${r.nama}__${r.tanggal}`))
   const records: { nama: string; tanggal: string }[] = []
-  for (const nama of allNama) { for (const tgl of allTanggal) { if (!hadirSet.has(`${nama}__${tgl}`)) records.push({ nama, tanggal: tgl }) } }
+  for (const nama of allNama) for (const tgl of allTanggal) if (!hadirSet.has(`${nama}__${tgl}`)) records.push({ nama, tanggal: tgl })
 
   return (
-    <>
-      <div className="metric-grid" style={{ gridTemplateColumns: 'repeat(3, 1fr)', marginBottom: 16 }}>
+    <div className="space-y-4">
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         <MetricCard label="Total Ketidakhadiran" value={records.length} icon="🚫" />
         <MetricCard label="Karyawan Terdampak" value={new Set(records.map(r => r.nama)).size} icon="👥" />
         <MetricCard label="Hari Dipantau" value={allTanggal.length} icon="📆" />
       </div>
       {records.length === 0 ? <EmptyState icon="🎉" message="Semua karyawan hadir setiap hari!" /> : (
-        <div className="table-wrap">
-          <table>
-            <thead><tr><th>Nama</th><th>Tanggal</th><th>Keterangan</th></tr></thead>
-            <tbody>
+        <div className="bg-card border border-border rounded-2xl overflow-hidden"><div className="overflow-x-auto">
+          <table className="w-full text-sm">
+            <thead><tr className="border-b border-border bg-surface">
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Nama</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Tanggal</th>
+              <th className="px-4 py-3 text-left text-[0.68rem] font-semibold text-muted uppercase tracking-wider">Keterangan</th>
+            </tr></thead>
+            <tbody className="divide-y divide-border/50">
               {records.map((r, i) => (
-                <tr key={i}>
-                  <td style={{ fontWeight: 700 }}>{r.nama}</td>
-                  <td className="mono">{r.tanggal}</td>
-                  <td><span className="badge badge-red">🚫 Tidak Hadir</span></td>
+                <tr key={i} className="hover:bg-surface/60 transition-colors">
+                  <td className="px-4 py-3 font-semibold text-dark">{r.nama}</td>
+                  <td className="px-4 py-3 font-mono text-xs">{r.tanggal}</td>
+                  <td className="px-4 py-3"><span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[0.68rem] font-semibold bg-red-50 text-red-700 ring-1 ring-inset ring-red-600/10">🚫 Tidak Hadir</span></td>
                 </tr>
               ))}
             </tbody>
           </table>
-        </div>
+        </div></div>
       )}
-    </>
+    </div>
   )
 }
