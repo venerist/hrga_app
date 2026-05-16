@@ -9,10 +9,10 @@ import type {
   AttendanceStats,
   RawFingerprintRecord,
   AttendanceSummary,
+  ATTENDANCE_CONSTANTS,
 } from '@/types/attendance.types'
 
-const JAM_MASUK_STD = 8 * 60 // 08:00 in minutes
-const TOLERANSI = 5
+const { JAM_MASUK_STD, TOLERANSI } = ATTENDANCE_CONSTANTS
 
 function formatTime(d: Date): string {
   return d.toTimeString().slice(0, 5)
