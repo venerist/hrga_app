@@ -21,7 +21,7 @@ export const nationalHolidayService = {
         throw new Error('Invalid holiday data format')
       }
 
-      const holidays: Omit<NationalHoliday, 'id' | 'created_at'>[] = data
+      const nationalHolidays: Omit<NationalHoliday, 'id' | 'created_at'>[] = data
         .filter((h: any) => h.is_holiday)
         .map((h: any) => ({
           holiday_date: h.holiday_date,
@@ -30,7 +30,7 @@ export const nationalHolidayService = {
         }))
 
       // 3. Save to DB
-      await nationalHolidayRepository.bulkUpsert(holidays)
+      await nationalHolidayRepository.bulkUpsert(nationalHolidays)
 
       // 4. Return from DB to get IDs
       return await nationalHolidayRepository.getByYear(year)

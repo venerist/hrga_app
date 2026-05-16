@@ -9,10 +9,16 @@ import type {
   AttendanceStats,
   RawFingerprintRecord,
   AttendanceSummary,
-  ATTENDANCE_CONSTANTS,
 } from '@/types/attendance.types'
+import { ATTENDANCE_CONFIG } from '@/lib/attendance/attendance-utils'
 
-const { JAM_MASUK_STD, TOLERANSI } = ATTENDANCE_CONSTANTS
+function getAttendanceConstants() {
+  const [startHour, startMin] = (ATTENDANCE_CONFIG.WORK_START || '08:00').split(':').map(Number)
+  return {
+    JAM_MASUK_STD: startHour * 60 + startMin,
+    TOLERANSI: 5
+  }
+}
 
 function formatTime(d: Date): string {
   return d.toTimeString().slice(0, 5)
@@ -67,6 +73,7 @@ export const attendanceService = {
       grouped[key].times.push(dt)
     }
 
+    const { JAM_MASUK_STD, TOLERANSI } = getAttendanceConstants()
     const results: Omit<Absensi, 'id' | 'created_at'>[] = []
 
     for (const [key, val] of Object.entries(grouped)) {

@@ -1,4 +1,3 @@
-import { format, parse, isSunday, isSaturday, getDay } from 'date-fns'
 import type { AbsensiStatus } from '@/types/attendance.types'
 
 export const ATTENDANCE_CONFIG = {
@@ -8,11 +7,16 @@ export const ATTENDANCE_CONFIG = {
 }
 
 export function isWorkDay(date: Date, holidays: string[]): boolean {
-  const dateStr = format(date, 'yyyy-MM-dd')
+  // Format to yyyy-mm-dd
+  const year = date.getFullYear()
+  const month = String(date.getMonth() + 1).padStart(2, '0')
+  const day = String(date.getDate()).padStart(2, '0')
+  const dateStr = `${year}-${month}-${day}`
+  
   if (holidays.includes(dateStr)) return false
   
-  const day = getDay(date)
-  return ATTENDANCE_CONFIG.WORK_DAYS.includes(day)
+  const dayOfWeek = date.getDay()
+  return ATTENDANCE_CONFIG.WORK_DAYS.includes(dayOfWeek)
 }
 
 export function calculateStatus(

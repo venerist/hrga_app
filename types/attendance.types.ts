@@ -158,7 +158,3 @@ export const ABSENSI_STATUS_BADGE: Record<AbsensiStatus, BadgeConfig> = {
   'Tepat Waktu':   { className: 'badge-green' },
 }
 
-export const ATTENDANCE_CONSTANTS = {
-  JAM_MASUK_STD: 8 * 60, // 08:00 in minutes
-  TOLERANSI: 5,
-}
