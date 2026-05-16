@@ -1,6 +1,9 @@
 export const env = {
   SUPABASE_URL: (() => {
     let url = (process.env.NEXT_PUBLIC_SUPABASE_URL || '').trim().replace(/[\s\uFEFF\xA0]+/g, '').replace(/\/+$/, '');
+    if (url.endsWith('/rest/v1')) {
+      url = url.replace(/\/rest\/v1$/, '');
+    }
     if (url && !url.startsWith('http')) url = `https://${url}`;
     return url;
   })(),

@@ -1,54 +1,146 @@
 -- =============================================
--- HRGA SYSTEM — Enhanced Enterprise Schema
--- Compatible with Supabase (PostgreSQL)
+-- Veneris HRIS — Enterprise Database Schema
 -- =============================================
 
--- ============ CORE TABLES ============
+CREATE EXTENSION IF NOT EXISTS "pgcrypto";
 
--- Departments
-CREATE TABLE IF NOT EXISTS departments (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  nama TEXT UNIQUE NOT NULL,
-  manager TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- Employees master data
+-- Master employee table
 CREATE TABLE IF NOT EXISTS employees (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  no_id TEXT UNIQUE,
-  nama TEXT NOT NULL,
-  email TEXT,
-  departemen TEXT REFERENCES departments(nama),
-  jabatan TEXT,
-  tgl_masuk DATE,
-  status TEXT DEFAULT 'Aktif' CHECK (status IN ('Aktif', 'Non-Aktif', 'Resign')),
-  created_at TIMESTAMPTZ DEFAULT now()
+  nik TEXT UNIQUE NOT NULL,
+  name TEXT NOT NULL,
+  division TEXT,
+  position TEXT,
+  status TEXT NOT NULL DEFAULT 'Active' CHECK (status IN ('Active', 'Inactive')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- Users & Authentication
-CREATE TABLE IF NOT EXISTS users (
+-- Attendance import batch tracking
+CREATE TABLE IF NOT EXISTS attendance_import_batches (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  email TEXT UNIQUE NOT NULL,
-  password_hash TEXT NOT NULL,
-  full_name TEXT NOT NULL,
-  role TEXT DEFAULT 'viewer' CHECK (role IN ('admin', 'hr_manager', 'hr_staff', 'viewer')),
-  is_active BOOLEAN DEFAULT true,
-  last_login TIMESTAMPTZ,
-  created_at TIMESTAMPTZ DEFAULT now()
+  file_name TEXT NOT NULL,
+  uploaded_by TEXT,
+  upload_date TIMESTAMPTZ NOT NULL DEFAULT now(),
+  total_records INTEGER NOT NULL DEFAULT 0,
+  status TEXT NOT NULL DEFAULT 'Pending' CHECK (status IN ('Pending', 'Processing', 'Completed', 'Failed'))
 );
 
--- Roles (extensible permissions)
+-- Raw fingerprint attendance data
+CREATE TABLE IF NOT EXISTS attendance_raw (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_nik TEXT NOT NULL,
+  attendance_date DATE NOT NULL,
+  check_in TIMESTAMPTZ,
+  check_out TIMESTAMPTZ,
+  batch_id UUID REFERENCES attendance_import_batches(id) ON DELETE SET NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Processed attendance summary: source of truth for payroll and reports
+CREATE TABLE IF NOT EXISTS attendance_summary (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_nik TEXT NOT NULL,
+  date DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Absent',
+  late_minutes INTEGER NOT NULL DEFAULT 0,
+  overtime_minutes INTEGER NOT NULL DEFAULT 0,
+  work_hours NUMERIC NOT NULL DEFAULT 0,
+  check_in TIMESTAMPTZ,
+  check_out TIMESTAMPTZ,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (employee_nik, date)
+);
+
+-- Attendance overrides created from approved leave requests
+CREATE TABLE IF NOT EXISTS leave_types (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  is_paid BOOLEAN NOT NULL DEFAULT true,
+  affect_attendance BOOLEAN NOT NULL DEFAULT true,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS leave_requests (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_nik TEXT NOT NULL,
+  employee_name TEXT,
+  leave_type_id UUID REFERENCES leave_types(id) ON DELETE SET NULL,
+  start_date DATE NOT NULL,
+  end_date DATE NOT NULL,
+  status TEXT NOT NULL DEFAULT 'Draft' CHECK (status IN ('Draft', 'Pending', 'Approved', 'Rejected')),
+  approved_by TEXT,
+  approved_at TIMESTAMPTZ,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS attendance_overrides (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  employee_nik TEXT NOT NULL,
+  date DATE NOT NULL,
+  leave_request_id UUID REFERENCES leave_requests(id) ON DELETE SET NULL,
+  old_status TEXT,
+  new_status TEXT NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Payroll tables
+CREATE TABLE IF NOT EXISTS payroll_periods (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  month INTEGER NOT NULL CHECK (month BETWEEN 1 AND 12),
+  year INTEGER NOT NULL CHECK (year >= 2000),
+  status TEXT NOT NULL DEFAULT 'Open' CHECK (status IN ('Open', 'Processing', 'Approved', 'Closed')),
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS payroll_details (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  period_id UUID NOT NULL REFERENCES payroll_periods(id) ON DELETE CASCADE,
+  employee_nik TEXT NOT NULL,
+  base_salary NUMERIC NOT NULL DEFAULT 0,
+  attendance_deduction NUMERIC NOT NULL DEFAULT 0,
+  overtime_pay NUMERIC NOT NULL DEFAULT 0,
+  bpjs NUMERIC NOT NULL DEFAULT 0,
+  tax_pph21 NUMERIC NOT NULL DEFAULT 0,
+  net_salary NUMERIC NOT NULL DEFAULT 0,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+CREATE TABLE IF NOT EXISTS payroll_settings (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  key TEXT UNIQUE NOT NULL,
+  value TEXT NOT NULL,
+  description TEXT,
+  updated_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- RBAC tables
 CREATE TABLE IF NOT EXISTS roles (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   name TEXT UNIQUE NOT NULL,
-  permissions JSONB DEFAULT '[]'::jsonb,
-  created_at TIMESTAMPTZ DEFAULT now()
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
--- ============ MODULE TABLES ============
+CREATE TABLE IF NOT EXISTS modules (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  name TEXT UNIQUE NOT NULL,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
 
--- ABSENSI (hasil proses fingerprint)
+CREATE TABLE IF NOT EXISTS permissions (
+  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
+  role_id UUID NOT NULL REFERENCES roles(id) ON DELETE CASCADE,
+  module_id UUID NOT NULL REFERENCES modules(id) ON DELETE CASCADE,
+  can_view BOOLEAN NOT NULL DEFAULT false,
+  can_create BOOLEAN NOT NULL DEFAULT false,
+  can_edit BOOLEAN NOT NULL DEFAULT false,
+  can_delete BOOLEAN NOT NULL DEFAULT false,
+  can_approve BOOLEAN NOT NULL DEFAULT false,
+  created_at TIMESTAMPTZ NOT NULL DEFAULT now()
+);
+
+-- Legacy table for compatibility with current UI
 CREATE TABLE IF NOT EXISTS absensi (
   id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
   departemen TEXT,
@@ -68,99 +160,13 @@ CREATE TABLE IF NOT EXISTS absensi (
   created_at TIMESTAMPTZ DEFAULT now()
 );
 
--- REKRUTMEN
-CREATE TABLE IF NOT EXISTS rekrutmen (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  nama TEXT NOT NULL,
-  posisi TEXT NOT NULL,
-  tgl_melamar DATE,
-  status TEXT DEFAULT 'Screening',
-  catatan TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- CUTI & IZIN
-CREATE TABLE IF NOT EXISTS cuti (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  nama TEXT NOT NULL,
-  jenis TEXT,
-  tgl_mulai DATE,
-  tgl_selesai DATE,
-  durasi_hari INTEGER,
-  alasan TEXT,
-  status TEXT DEFAULT 'Pending',
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- KPI
-CREATE TABLE IF NOT EXISTS kpi (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  nama TEXT NOT NULL,
-  periode TEXT,
-  target NUMERIC,
-  realisasi NUMERIC,
-  capaian NUMERIC,
-  predikat TEXT,
-  catatan TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- GENERAL AFFAIRS
-CREATE TABLE IF NOT EXISTS ga (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  pemohon TEXT NOT NULL,
-  kategori TEXT,
-  deskripsi TEXT,
-  prioritas TEXT DEFAULT 'Normal',
-  tanggal DATE,
-  status TEXT DEFAULT 'Open',
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- ============ AUDIT & SECURITY ============
-
--- Audit Logs
-CREATE TABLE IF NOT EXISTS audit_logs (
-  id UUID DEFAULT gen_random_uuid() PRIMARY KEY,
-  user_id UUID REFERENCES users(id),
-  user_email TEXT,
-  action TEXT NOT NULL,
-  table_name TEXT,
-  record_id UUID,
-  old_data JSONB,
-  new_data JSONB,
-  ip_address TEXT,
-  created_at TIMESTAMPTZ DEFAULT now()
-);
-
--- ============ ROW LEVEL SECURITY ============
-
-ALTER TABLE absensi ENABLE ROW LEVEL SECURITY;
-ALTER TABLE rekrutmen ENABLE ROW LEVEL SECURITY;
-ALTER TABLE cuti ENABLE ROW LEVEL SECURITY;
-ALTER TABLE kpi ENABLE ROW LEVEL SECURITY;
-ALTER TABLE ga ENABLE ROW LEVEL SECURITY;
-ALTER TABLE departments ENABLE ROW LEVEL SECURITY;
-ALTER TABLE employees ENABLE ROW LEVEL SECURITY;
-ALTER TABLE users ENABLE ROW LEVEL SECURITY;
-ALTER TABLE audit_logs ENABLE ROW LEVEL SECURITY;
-
--- Policies (service role key bypasses RLS)
-CREATE POLICY "allow all absensi"    ON absensi    FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow all rekrutmen"  ON rekrutmen  FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow all cuti"       ON cuti       FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow all kpi"        ON kpi        FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow all ga"         ON ga         FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow all departments" ON departments FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow all employees"  ON employees  FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow all users"      ON users      FOR ALL USING (true) WITH CHECK (true);
-CREATE POLICY "allow all audit_logs" ON audit_logs FOR ALL USING (true) WITH CHECK (true);
-
--- ============ INDEXES ============
-
-CREATE INDEX IF NOT EXISTS idx_absensi_periode ON absensi(periode);
-CREATE INDEX IF NOT EXISTS idx_absensi_nama ON absensi(nama);
-CREATE INDEX IF NOT EXISTS idx_absensi_tanggal ON absensi(tanggal);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_user ON audit_logs(user_id);
-CREATE INDEX IF NOT EXISTS idx_audit_logs_created ON audit_logs(created_at);
-CREATE INDEX IF NOT EXISTS idx_employees_departemen ON employees(departemen);
+-- Indexes
+CREATE INDEX IF NOT EXISTS idx_attendance_raw_nik ON attendance_raw(employee_nik);
+CREATE INDEX IF NOT EXISTS idx_attendance_raw_date ON attendance_raw(attendance_date);
+CREATE INDEX IF NOT EXISTS idx_attendance_summary_nik ON attendance_summary(employee_nik);
+CREATE INDEX IF NOT EXISTS idx_attendance_summary_date ON attendance_summary(date);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_nik ON leave_requests(employee_nik);
+CREATE INDEX IF NOT EXISTS idx_leave_requests_status ON leave_requests(status);
+CREATE INDEX IF NOT EXISTS idx_payroll_periods_month_year ON payroll_periods(month, year);
+CREATE INDEX IF NOT EXISTS idx_payroll_details_period ON payroll_details(period_id);
+CREATE INDEX IF NOT EXISTS idx_permissions_role_module ON permissions(role_id, module_id);

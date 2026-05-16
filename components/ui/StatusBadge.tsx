@@ -15,10 +15,12 @@ const badgeStyles: Record<string, string> = {
 }
 
 export function StatusBadge({ label, config }: StatusBadgeProps) {
-  const cls = badgeStyles[config.className] || badgeStyles['badge-gray']
+  const className = config?.className || 'badge-gray'
+  const cls = badgeStyles[className] || badgeStyles['badge-gray']
+  
   return (
     <span className={`inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-[0.7rem] font-semibold ring-1 ring-inset ${cls}`}>
-      {config.emoji && <span>{config.emoji}</span>}
+      {config?.emoji && <span>{config.emoji}</span>}
       {label}
     </span>
   )

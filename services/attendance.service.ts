@@ -8,10 +8,11 @@ import type {
   RekapKaryawan,
   AttendanceStats,
   RawFingerprintRecord,
+  AttendanceSummary,
 } from '@/types/attendance.types'
-import { ATTENDANCE_CONSTANTS } from '@/types/attendance.types'
 
-const { JAM_MASUK_STD, TOLERANSI } = ATTENDANCE_CONSTANTS
+const JAM_MASUK_STD = 8 * 60 // 08:00 in minutes
+const TOLERANSI = 5
 
 function formatTime(d: Date): string {
   return d.toTimeString().slice(0, 5)
@@ -21,13 +22,25 @@ function getPeriode(tanggal: string): string {
   return tanggal.slice(0, 7) // "2026-03"
 }
 
+function mapToSummary(record: Omit<Absensi, 'id' | 'created_at'>): Omit<AttendanceSummary, 'id' | 'updated_at'> {
+  return {
+    employee_nik: record.no_id || record.nama,
+    attendance_date: record.tanggal,
+    status: record.status,
+    late_minutes: record.menit_terlambat,
+    overtime_minutes: 0,
+    work_hours: record.durasi_jam ?? 0,
+    check_in: record.jam_masuk,
+    check_out: record.jam_keluar,
+  }
+}
+
 export const attendanceService = {
   /**
    * Process raw fingerprint Excel data into structured attendance records.
    * Groups entries by (Nama, Tanggal), determines shift, calculates lateness.
    */
   processFingerprint(rawData: RawFingerprintRecord[]): Omit<Absensi, 'id' | 'created_at'>[] {
-    // Group by (Nama, Tanggal)
     const grouped: Record<string, {
       departemen: string
       nama: string
@@ -47,7 +60,7 @@ export const attendanceService = {
         grouped[key] = {
           departemen: row['Departemen'] || '-',
           nama: row['Nama'],
-          no_id: row['No.ID'] || '-',
+          no_id: row['No.ID'] || row['Nama'],
           times: [],
         }
       }
@@ -157,8 +170,11 @@ export const attendanceService = {
 
   /**
    * Save processed attendance data to the database.
+   * Writes both legacy absensi and new attendance_summary records.
    */
   async saveToDatabase(data: Omit<Absensi, 'id' | 'created_at'>[], periode: string): Promise<void> {
+    const summaryRecords = data.map(mapToSummary)
+    await attendanceRepository.bulkUpsertSummary(summaryRecords)
     await attendanceRepository.bulkUpsert(data, periode)
   },
 }

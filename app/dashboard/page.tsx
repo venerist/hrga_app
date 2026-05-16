@@ -104,7 +104,7 @@ export default function DashboardPage() {
         </>
       ) : (
         <div className="flex items-center gap-3 p-4 rounded-2xl bg-blue-50 text-blue-800 text-sm border border-blue-100">
-          <Upload size={18} /> Upload data fingerprint di menu <strong>Payroll & Absensi</strong> untuk melihat ringkasan.
+          <Upload size={18} /> Upload data fingerprint di menu <strong>Attendance Management</strong> untuk melihat ringkasan.
         </div>
       )}
     </div>

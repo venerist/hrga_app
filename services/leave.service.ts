@@ -1,41 +1,30 @@
 // Leave service — business logic for leave management
 
+import { attendanceRepository } from '@/repositories/attendance.repository'
 import { leaveRepository } from '@/repositories/leave.repository'
-import type { Cuti, CutiInsert, CutiStatus, CutiJenis } from '@/types/leave.types'
+import type { AbsensiStatus } from '@/types/attendance.types'
+import type { Cuti, CutiInsert, CutiStatus } from '@/types/leave.types'
 
 export const leaveService = {
-  /**
-   * Fetch all leave records.
-   */
   async getAll(): Promise<Cuti[]> {
     return leaveRepository.getAll()
   },
 
-  /**
-   * Get summary statistics for leave module.
-   */
   getStats(rows: Cuti[]) {
     return {
       total: rows.length,
       totalHari: rows.reduce((s, r) => s + (r.durasi_hari || 0), 0),
       pending: rows.filter(r => r.status === 'Pending').length,
-      disetujui: rows.filter(r => r.status === 'Disetujui').length,
-      ditolak: rows.filter(r => r.status === 'Ditolak').length,
+      approved: rows.filter(r => r.status === 'Approved').length,
+      rejected: rows.filter(r => r.status === 'Rejected').length,
     }
   },
 
-  /**
-   * Calculate the duration in days between two dates (inclusive).
-   */
-  calculateDuration(tglMulai: string, tglSelesai: string): number {
-    const diff = new Date(tglSelesai).getTime() - new Date(tglMulai).getTime()
+  calculateDuration(startDate: string, endDate: string): number {
+    const diff = new Date(endDate).getTime() - new Date(startDate).getTime()
     return Math.max(1, Math.round(diff / 86400000) + 1)
   },
 
-  /**
-   * Validate and create a new leave request.
-   * @throws Error if validation fails.
-   */
   async create(form: {
     nama: string
     jenis: string
@@ -51,14 +40,14 @@ export const leaveService = {
       throw new Error('Tanggal selesai tidak boleh sebelum tanggal mulai.')
     }
 
-    const durasiHari = this.calculateDuration(form.tgl_mulai, form.tgl_selesai)
+    const durasi = this.calculateDuration(form.tgl_mulai, form.tgl_selesai)
 
     const record: CutiInsert = {
       nama: form.nama.trim(),
-      jenis: form.jenis as CutiJenis,
+      jenis: form.jenis,
       tgl_mulai: form.tgl_mulai,
       tgl_selesai: form.tgl_selesai,
-      durasi_hari: durasiHari,
+      durasi_hari: durasi,
       alasan: form.alasan.trim(),
       status: 'Pending',
     }
@@ -66,16 +55,10 @@ export const leaveService = {
     await leaveRepository.create(record)
   },
 
-  /**
-   * Update the status of a leave request.
-   */
   async updateStatus(id: string, status: CutiStatus): Promise<void> {
     await leaveRepository.updateStatus(id, status)
   },
 
-  /**
-   * Delete a leave record.
-   */
   async delete(id: string): Promise<void> {
     await leaveRepository.delete(id)
   },

@@ -24,6 +24,11 @@ export type BadgeVariant =
   | 'badge-orange'
   | 'badge-blue'
   | 'badge-gray'
+  | 'badge-amber'
+  | 'badge-cyan'
+  | 'badge-slate'
+  | 'badge-pink'
+  | 'badge-black'
 
 export interface BadgeConfig {
   className: BadgeVariant

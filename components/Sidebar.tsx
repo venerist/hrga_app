@@ -1,7 +1,7 @@
 'use client'
 import { useRouter, usePathname } from 'next/navigation'
 import { AppLogo } from '@/components/ui'
-import { LayoutDashboard, DollarSign, Target, CalendarDays, Star, Wrench, LogOut } from 'lucide-react'
+import { LayoutDashboard, ClipboardList, BarChart3, DollarSign, Target, Star, Wrench, Settings, LogOut, Calendar } from 'lucide-react'
 import type { LucideIcon } from 'lucide-react'
 import { createClient } from '@/lib/supabase/client'
 import { useEffect, useState } from 'react'
@@ -15,12 +15,15 @@ interface NavItem {
 }
 
 const NAV: NavItem[] = [
-  { href: '/dashboard',           icon: LayoutDashboard, label: 'Dashboard' },
-  { href: '/dashboard/payroll',   icon: DollarSign,      label: 'Payroll & Absensi' },
-  { href: '/dashboard/rekrutmen', icon: Target,          label: 'Rekrutmen' },
-  { href: '/dashboard/cuti',      icon: CalendarDays,    label: 'Cuti & Izin' },
-  { href: '/dashboard/kpi',       icon: Star,            label: 'KPI' },
-  { href: '/dashboard/ga',        icon: Wrench,          label: 'General Affairs' },
+  { href: '/dashboard',            icon: LayoutDashboard, label: 'Dashboard' },
+  { href: '/dashboard/attendance', icon: ClipboardList,   label: 'Attendance Management' },
+  { href: '/dashboard/cuti',       icon: Calendar,        label: 'Leave Management' },
+  { href: '/dashboard/payroll',    icon: DollarSign,      label: 'Payroll Automation' },
+  { href: '/dashboard/rekrutmen',  icon: Target,          label: 'Recruitment' },
+  { href: '/dashboard/kpi',        icon: Star,            label: 'KPI' },
+  { href: '/dashboard/ga',         icon: Wrench,          label: 'General Affairs' },
+  { href: '/dashboard/analytics',  icon: BarChart3,       label: 'Analytics' },
+  { href: '/dashboard/settings',   icon: Settings,        label: 'Settings' },
 ]
 
 export default function Sidebar() {

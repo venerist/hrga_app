@@ -11,13 +11,24 @@ export default function CutiPage() {
   const [loading, setLoading] = useState(true)
   const [saving, setSaving] = useState(false)
   const [showForm, setShowForm] = useState(false)
-  const [form, setForm] = useState({ nama: '', jenis: 'Cuti Tahunan', tgl_mulai: '', tgl_selesai: '', alasan: '' })
+  const [form, setForm] = useState({ nama: '', jenis: 'CUTI REGULER', tgl_mulai: '', tgl_selesai: '', alasan: '' })
 
-  async function load() { setLoading(true); try { setRows(await leaveService.getAll()) } catch (e) { console.error(e) } finally { setLoading(false) } }
+  async function load() { 
+    setLoading(true); 
+    try { 
+      const data = await leaveService.getAll();
+      setRows(data);
+    } catch (e: any) { 
+      console.error('Failed to load leave requests:', e);
+      alert('Gagal memuat data cuti: ' + (e.message || 'Error tidak diketahui'));
+    } finally { 
+      setLoading(false); 
+    } 
+  }
   useEffect(() => { load() }, [])
 
   async function save() {
-    try { setSaving(true); await leaveService.create(form); setShowForm(false); setForm({ nama: '', jenis: 'Cuti Tahunan', tgl_mulai: '', tgl_selesai: '', alasan: '' }); load() }
+    try { setSaving(true); await leaveService.create(form); setShowForm(false); setForm({ nama: '', jenis: 'CUTI REGULER', tgl_mulai: '', tgl_selesai: '', alasan: '' }); load() }
     catch (e: any) { alert(e.message) } finally { setSaving(false) }
   }
   async function updateStatus(id: string, status: string) { await leaveService.updateStatus(id, status as CutiStatus); load() }

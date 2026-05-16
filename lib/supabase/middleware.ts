@@ -55,6 +55,13 @@ export async function updateSession(request: NextRequest) {
 
   const isLegacyAuth = request.cookies.get('hrga_legacy_auth')?.value === 'true'
 
+  // Root redirect
+  if (path === '/') {
+    const url = request.nextUrl.clone()
+    url.pathname = (user || isLegacyAuth) ? '/dashboard' : '/login'
+    return NextResponse.redirect(url)
+  }
+
   if (path === '/login' && (user || isLegacyAuth)) {
     const url = request.nextUrl.clone()
     url.pathname = '/dashboard'
